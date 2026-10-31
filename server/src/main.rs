@@ -1,5 +1,10 @@
-use myownredis::{Result, server};
+mod connection;
+mod server;
+
 use tokio::net::TcpListener;
+
+pub type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[tokio::main]
 async fn main() -> Result<()> {

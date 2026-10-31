@@ -1,9 +1,14 @@
-[package]
-name = "myownredis"
+[workspace]
+resolver = "3"
+members = ["resp", "server", "cli"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[workspace.dependencies]
+resp = { path = "resp" }
 bytes = "1.12.1"
+clap = { version = "4.6.7", features = ["derive"] }
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["full"] }

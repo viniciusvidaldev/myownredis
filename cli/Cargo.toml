@@ -1,0 +1,9 @@
+[package]
+name = "cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+resp.workspace = true
+thiserror.workspace = true
+clap.workspace = true

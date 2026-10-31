@@ -1,9 +1,7 @@
+use resp::Frame;
 use tokio::net::TcpListener;
 
-use crate::{
-    connection::{Connection, ConnectionError, ReadFrame},
-    frame::Frame,
-};
+use crate::connection::{Connection, ConnectionError, ReadFrame};
 
 pub async fn run(listener: TcpListener) -> crate::Result<()> {
     let mut server = Listener { listener };

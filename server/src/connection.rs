@@ -1,10 +1,9 @@
 use bytes::{Buf, BytesMut};
+use resp::{Decoded, Frame, ProtocolError};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
 };
-
-use crate::frame::{Decoded, Frame, ProtocolError};
 
 // TODO: gotta reason about a value here
 const MAX_FRAME_SIZE: usize = 8 * 1024 * 1024;

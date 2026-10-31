@@ -3,7 +3,7 @@ mod num;
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::frame::decoder::ParseError;
+use crate::decoder::ParseError;
 
 pub use decoder::ProtocolError;
 
