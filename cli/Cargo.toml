@@ -7,3 +7,4 @@ edition.workspace = true
 resp.workspace = true
 thiserror.workspace = true
 clap.workspace = true
+bytes.workspace = true

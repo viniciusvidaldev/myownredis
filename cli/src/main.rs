@@ -1,7 +1,15 @@
-use std::{io, process::ExitCode};
+mod client;
 
+use std::{
+    io::{self, Write},
+    process::ExitCode,
+};
+
+use bytes::Bytes;
 use clap::{Parser, Subcommand};
-use resp::ProtocolError;
+use resp::Frame;
+
+use crate::client::{Client, ClientError};
 
 #[derive(Parser)]
 #[command(disable_help_flag = true)]
@@ -25,21 +33,17 @@ enum Command {
     Ping,
 }
 
-#[derive(Debug, thiserror::Error)]
-enum ClientError {
-    #[error(transparent)]
-    Io(#[from] io::Error),
-    #[error(transparent)]
-    Protocol(#[from] ProtocolError),
-    #[error("server closed the connection")]
-    Closed,
-}
-
 fn run(cli: Cli) -> Result<(), ClientError> {
+    let mut client = Client::connect((cli.host, cli.port))?;
+
     if let Some(cmd) = cli.command {
-        println!("command: {:?}", cmd);
+        let req = request(cmd);
+        let res = client.call(&req)?;
+        writeln!(io::stdout(), "{res}")?;
+        return Ok(());
     }
-    Ok(())
+
+    loop {}
 }
 
 fn main() -> ExitCode {
@@ -51,4 +55,15 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn request(command: Command) -> Frame {
+    let args = match command {
+        Command::Ping => vec![bulk("PING")],
+    };
+    Frame::Array(args)
+}
+
+fn bulk(s: &str) -> Frame {
+    Frame::Bulk(Bytes::copy_from_slice(s.as_bytes()))
 }
