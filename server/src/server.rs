@@ -48,7 +48,23 @@ impl Handler {
                 Err(e) => return Err(e.into()),
             };
 
-            println!("{frame:?}");
+            let reply = if is_ping(&frame) {
+                Frame::Simple("PONG".into())
+            } else {
+                Frame::Error("ERR unknown command".into())
+            };
+            self.conn.write_frame(&reply).await?;
         }
     }
+}
+
+// !! for testing purposes, it will be deleted
+fn is_ping(frame: &Frame) -> bool {
+    let Frame::Array(args) = frame else {
+        return false;
+    };
+    let [Frame::Bulk(name)] = args.as_slice() else {
+        return false;
+    };
+    name.eq_ignore_ascii_case(b"PING")
 }

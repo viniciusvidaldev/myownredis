@@ -1,4 +1,4 @@
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use resp::{Decoded, Frame, ProtocolError};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -62,9 +62,9 @@ impl Connection {
     }
 
     pub async fn write_frame(&mut self, frame: &Frame) -> Result<(), ConnectionError> {
+        self.write_buf.clear();
         frame.encode(&mut self.write_buf);
         self.stream.write_all(&self.write_buf).await?;
-        self.write_buf.clear();
         Ok(())
     }
 }
