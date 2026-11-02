@@ -30,7 +30,7 @@ pub enum ProtocolError {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub(super) enum ParseError {
+pub(super) enum DecodeError {
     #[error("incomplete frame")]
     Incomplete,
     #[error(transparent)]
@@ -42,13 +42,13 @@ enum Len {
     Null,
 }
 
-pub(super) fn check(buf: &[u8]) -> Result<usize, ParseError> {
+pub(super) fn check(buf: &[u8]) -> Result<usize, DecodeError> {
     let mut d = Decoder::new(buf);
     d.skip_frame(0)?;
     Ok(d.pos)
 }
 
-pub(super) fn parse(src: &Bytes) -> Result<Frame, ParseError> {
+pub(super) fn parse(src: &Bytes) -> Result<Frame, DecodeError> {
     let mut d = Decoder::new(src);
     d.parse_frame(0)
 }
@@ -59,7 +59,7 @@ struct Decoder<'a, B: ?Sized> {
 }
 
 impl<'a> Decoder<'a, Bytes> {
-    fn parse_frame(&mut self, depth: usize) -> Result<Frame, ParseError> {
+    fn parse_frame(&mut self, depth: usize) -> Result<Frame, DecodeError> {
         let frame = match self.get_u8()? {
             b'+' => Frame::Simple(self.get_str()?.to_owned()),
             b'-' => Frame::Error(self.get_str()?.to_owned()),
@@ -94,7 +94,7 @@ impl<'a, B: AsRef<[u8]> + ?Sized> Decoder<'a, B> {
     }
 
     // Must accept exactly the same input as parse_frame.
-    fn skip_frame(&mut self, depth: usize) -> Result<(), ParseError> {
+    fn skip_frame(&mut self, depth: usize) -> Result<(), DecodeError> {
         match self.get_u8()? {
             b'+' | b'-' => {
                 self.get_str()?;
@@ -119,28 +119,28 @@ impl<'a, B: AsRef<[u8]> + ?Sized> Decoder<'a, B> {
         Ok(())
     }
 
-    fn get_str(&mut self) -> Result<&'a str, ParseError> {
+    fn get_str(&mut self) -> Result<&'a str, DecodeError> {
         let line = self.get_line()?;
         std::str::from_utf8(line).map_err(|_| ProtocolError::InvalidUtf8.into())
     }
 
-    fn get_i64(&mut self) -> Result<i64, ParseError> {
+    fn get_i64(&mut self) -> Result<i64, DecodeError> {
         let line = self.get_line()?;
         num::parse_i64(line).ok_or(ProtocolError::InvalidInteger.into())
     }
 
-    fn get_bulk_len(&mut self) -> Result<Len, ParseError> {
+    fn get_bulk_len(&mut self) -> Result<Len, DecodeError> {
         self.get_len(MAX_BULK, ProtocolError::BulkTooLarge)
     }
 
-    fn get_array_len(&mut self, depth: usize) -> Result<Len, ParseError> {
+    fn get_array_len(&mut self, depth: usize) -> Result<Len, DecodeError> {
         if depth >= MAX_DEPTH {
             return Err(ProtocolError::TooDeep.into());
         }
         self.get_len(MAX_ARRAY, ProtocolError::ArrayTooLarge)
     }
 
-    fn get_len(&mut self, max: usize, too_large: ProtocolError) -> Result<Len, ParseError> {
+    fn get_len(&mut self, max: usize, too_large: ProtocolError) -> Result<Len, DecodeError> {
         let line = self.get_line()?;
         if line == b"-1" {
             return Ok(Len::Null);
@@ -152,7 +152,7 @@ impl<'a, B: AsRef<[u8]> + ?Sized> Decoder<'a, B> {
         Ok(Len::Of(n))
     }
 
-    fn get_bulk_body(&mut self, len: usize) -> Result<&'a [u8], ParseError> {
+    fn get_bulk_body(&mut self, len: usize) -> Result<&'a [u8], DecodeError> {
         let data = self.get_bytes(len)?;
         self.expect_crlf()?;
         Ok(data)
@@ -167,17 +167,17 @@ impl<'a, B: AsRef<[u8]> + ?Sized> Decoder<'a, B> {
         &src.as_ref()[self.pos..]
     }
 
-    fn get_u8(&mut self) -> Result<u8, ParseError> {
+    fn get_u8(&mut self) -> Result<u8, DecodeError> {
         Ok(self.get_bytes(1)?[0])
     }
 
-    fn get_line(&mut self) -> Result<&'a [u8], ParseError> {
+    fn get_line(&mut self) -> Result<&'a [u8], DecodeError> {
         let rest = self.rest();
         let max = MAX_LINE + CRLF.len();
         let scan = rest.get(..max).unwrap_or(rest);
         let Some(i) = scan.windows(CRLF.len()).position(|w| w == CRLF) else {
             if scan.len() < max {
-                return Err(ParseError::Incomplete);
+                return Err(DecodeError::Incomplete);
             }
             return Err(ProtocolError::LineTooLong.into());
         };
@@ -185,13 +185,13 @@ impl<'a, B: AsRef<[u8]> + ?Sized> Decoder<'a, B> {
         Ok(&rest[..i])
     }
 
-    fn get_bytes(&mut self, len: usize) -> Result<&'a [u8], ParseError> {
-        let data = self.rest().get(..len).ok_or(ParseError::Incomplete)?;
+    fn get_bytes(&mut self, len: usize) -> Result<&'a [u8], DecodeError> {
+        let data = self.rest().get(..len).ok_or(DecodeError::Incomplete)?;
         self.pos += len;
         Ok(data)
     }
 
-    fn expect_crlf(&mut self) -> Result<(), ParseError> {
+    fn expect_crlf(&mut self) -> Result<(), DecodeError> {
         if self.get_bytes(CRLF.len())? != CRLF {
             return Err(ProtocolError::MissingCrlf.into());
         }

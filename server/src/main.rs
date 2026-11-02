@@ -1,4 +1,6 @@
+mod command;
 mod connection;
+mod parse;
 mod server;
 
 use tokio::net::TcpListener;

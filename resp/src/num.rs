@@ -1,24 +1,24 @@
 use bytes::BufMut;
 
-pub(super) fn parse_i64(src: &[u8]) -> Option<i64> {
+pub fn parse_i64(src: &[u8]) -> Option<i64> {
     match src.strip_prefix(b"-") {
         Some(digits) => 0i64.checked_sub_unsigned(parse_u64(digits)?),
         None => i64::try_from(parse_u64(src)?).ok(),
     }
 }
 
-pub(super) fn parse_usize(src: &[u8]) -> Option<usize> {
+pub fn parse_usize(src: &[u8]) -> Option<usize> {
     usize::try_from(parse_u64(src)?).ok()
 }
 
-pub(super) fn put_i64<B: BufMut>(dst: &mut B, n: i64) {
+pub fn put_i64<B: BufMut>(dst: &mut B, n: i64) {
     if n < 0 {
         dst.put_u8(b'-');
     }
     put_u64(dst, n.unsigned_abs());
 }
 
-pub(super) fn put_usize<B: BufMut>(dst: &mut B, n: usize) {
+pub fn put_usize<B: BufMut>(dst: &mut B, n: usize) {
     put_u64(dst, n as u64);
 }
 

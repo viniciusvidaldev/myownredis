@@ -1,7 +1,10 @@
 use resp::Frame;
 use tokio::net::TcpListener;
 
-use crate::connection::{Connection, ConnectionError, ReadFrame};
+use crate::{
+    command::Command,
+    connection::{Connection, ConnectionError, ReadFrame},
+};
 
 pub async fn run(listener: TcpListener) -> crate::Result<()> {
     let mut server = Listener { listener };
@@ -48,23 +51,11 @@ impl Handler {
                 Err(e) => return Err(e.into()),
             };
 
-            let reply = if is_ping(&frame) {
-                Frame::Simple("PONG".into())
-            } else {
-                Frame::Error("ERR unknown command".into())
+            let reply = match Command::from_frame(frame) {
+                Ok(cmd) => cmd.execute(),
+                Err(e) => Frame::Error(e.to_string()),
             };
             self.conn.write_frame(&reply).await?;
         }
     }
-}
-
-// !! for testing purposes, it will be deleted
-fn is_ping(frame: &Frame) -> bool {
-    let Frame::Array(args) = frame else {
-        return false;
-    };
-    let [Frame::Bulk(name)] = args.as_slice() else {
-        return false;
-    };
-    name.eq_ignore_ascii_case(b"PING")
 }

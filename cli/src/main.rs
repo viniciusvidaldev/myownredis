@@ -1,7 +1,7 @@
 mod client;
 
 use std::{
-    io::{self, Write},
+    io::{self, Write, stdin},
     process::ExitCode,
 };
 
@@ -28,6 +28,13 @@ struct Cli {
     command: Option<Command>,
 }
 
+#[derive(Parser, Debug)]
+#[command(no_binary_name = true, name = "")]
+struct ReplLine {
+    #[command(subcommand)]
+    command: Command,
+}
+
 #[derive(Subcommand, Debug)]
 enum Command {
     Ping,
@@ -43,7 +50,31 @@ fn run(cli: Cli) -> Result<(), ClientError> {
         return Ok(());
     }
 
-    loop {}
+    loop {
+        print!("> ");
+        io::stdout().flush()?;
+
+        let mut line = String::new();
+        let n = stdin().read_line(&mut line)?;
+        if n == 0 {
+            return Ok(());
+        }
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let cmd = match ReplLine::try_parse_from(line.split_whitespace()) {
+            Ok(parsed) => parsed.command,
+            Err(e) => {
+                e.print()?;
+                continue;
+            }
+        };
+
+        let req = request(cmd);
+        let res = client.call(&req)?;
+        writeln!(io::stdout(), "{res}")?;
+    }
 }
 
 fn main() -> ExitCode {

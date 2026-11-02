@@ -5,9 +5,10 @@ use core::fmt;
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::decoder::ParseError;
+use crate::decoder::DecodeError;
 
 pub use decoder::ProtocolError;
+pub use num::parse_i64;
 
 const CRLF: &[u8] = b"\r\n";
 
@@ -31,8 +32,8 @@ impl Frame {
     pub fn decode(buf: &mut BytesMut) -> Result<Decoded, ProtocolError> {
         let len = match decoder::check(buf) {
             Ok(len) => len,
-            Err(ParseError::Incomplete) => return Ok(Decoded::Incomplete),
-            Err(ParseError::Invalid(e)) => return Err(e),
+            Err(DecodeError::Incomplete) => return Ok(Decoded::Incomplete),
+            Err(DecodeError::Invalid(e)) => return Err(e),
         };
         let src = buf.split_to(len).freeze();
         let frame = decoder::parse(&src).expect("check accepted exactly these bytes");
@@ -82,7 +83,7 @@ impl fmt::Display for Frame {
             Frame::Simple(s) => write!(f, "{s}"),
             Frame::Error(s) => write!(f, "(error) {s}"),
             Frame::Integer(n) => write!(f, "(integer) {n}"),
-            Frame::Bulk(data) => write!(f, "\"{}\"", data.escape_ascii()),
+            Frame::Bulk(data) => write!(f, "{}", data.escape_ascii()),
             Frame::Null => write!(f, "(nil)"),
             Frame::Array(items) if items.is_empty() => write!(f, "(empty array)"),
             Frame::Array(items) => {
