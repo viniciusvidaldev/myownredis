@@ -1,3 +1,4 @@
+mod cli;
 mod client;
 
 use std::{
@@ -5,81 +6,49 @@ use std::{
     process::ExitCode,
 };
 
-use bytes::Bytes;
-use clap::{Parser, Subcommand};
 use resp::Frame;
 
 use crate::client::{Client, ClientError};
 
-#[derive(Parser)]
-#[command(disable_help_flag = true)]
-struct Cli {
-    /// Name of the person to greet
-    #[arg(short = 'h', long, default_value = "127.0.0.1")]
-    host: String,
-
-    #[arg(short = 'p', long, default_value = "6379")]
-    port: u16,
-
-    #[arg(long, action = clap::ArgAction::Help)]
-    help: Option<bool>,
-
-    #[command(subcommand)]
-    command: Option<Command>,
-}
-
-#[derive(Parser, Debug)]
-#[command(no_binary_name = true, name = "")]
-struct ReplLine {
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand, Debug)]
-enum Command {
-    Ping,
-}
-
-fn run(cli: Cli) -> Result<(), ClientError> {
-    let mut client = Client::connect((cli.host, cli.port))?;
-
-    if let Some(cmd) = cli.command {
-        let req = request(cmd);
-        let res = client.call(&req)?;
-        writeln!(io::stdout(), "{res}")?;
-        return Ok(());
-    }
+fn repl(client: &mut Client) -> Result<(), ClientError> {
+    let mut line = String::new();
 
     loop {
         print!("> ");
         io::stdout().flush()?;
 
-        let mut line = String::new();
-        let n = stdin().read_line(&mut line)?;
-        if n == 0 {
+        line.clear();
+        if stdin().read_line(&mut line)? == 0 {
             return Ok(());
         }
-        if line.trim().is_empty() {
+
+        let args = cli::split_line(&line);
+        if args.is_empty() {
             continue;
         }
 
-        let cmd = match ReplLine::try_parse_from(line.split_whitespace()) {
-            Ok(parsed) => parsed.command,
-            Err(e) => {
-                e.print()?;
-                continue;
-            }
-        };
-
-        let req = request(cmd);
-        let res = client.call(&req)?;
-        writeln!(io::stdout(), "{res}")?;
+        exec(client, args)?;
     }
 }
 
+fn exec(client: &mut Client, args: Vec<String>) -> Result<(), ClientError> {
+    let res = client.call(&request(args))?;
+    writeln!(io::stdout(), "{res}")?;
+    Ok(())
+}
+
 fn main() -> ExitCode {
-    let cli = Cli::parse();
-    match run(cli) {
+    let cli = cli::parse_args();
+
+    let result = Client::connect((cli.host, cli.port)).and_then(|mut client| {
+        if cli.args.is_empty() {
+            repl(&mut client)
+        } else {
+            exec(&mut client, cli.args)
+        }
+    });
+
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("error: {e}");
@@ -88,13 +57,6 @@ fn main() -> ExitCode {
     }
 }
 
-fn request(command: Command) -> Frame {
-    let args = match command {
-        Command::Ping => vec![bulk("PING")],
-    };
-    Frame::Array(args)
-}
-
-fn bulk(s: &str) -> Frame {
-    Frame::Bulk(Bytes::copy_from_slice(s.as_bytes()))
+fn request(args: Vec<String>) -> Frame {
+    Frame::Array(args.into_iter().map(|a| Frame::Bulk(a.into())).collect())
 }
