@@ -1,6 +1,7 @@
 use resp::Frame;
 use tokio::net::TcpListener;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tracing::Instrument;
 
 use crate::{
     cmd::{Command, CommandError},
@@ -21,7 +22,10 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) -> crate::Result<
 
     let result = tokio::select! {
         res = server.run() => res,
-        _ = shutdown => Ok(()),
+        _ = shutdown => {
+            tracing::info!("shutting down");
+            Ok(())
+        }
     };
 
     let Listener {
@@ -34,6 +38,7 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) -> crate::Result<
     tracker.close();
     tracker.wait().await;
     drop(db_holder);
+    tracing::info!("shutdown complete");
 
     result
 }
@@ -48,7 +53,7 @@ struct Listener {
 impl Listener {
     async fn run(&mut self) -> crate::Result<()> {
         loop {
-            let (socket, _) = self.listener.accept().await?;
+            let (socket, peer) = self.listener.accept().await?;
 
             let mut handler = Handler {
                 conn: Connection::new(socket),
@@ -56,11 +61,17 @@ impl Listener {
                 shutdown: self.token.clone(),
             };
 
-            self.tracker.spawn(async move {
-                if let Err(err) = handler.run().await {
-                    eprintln!("connection error: {}", err);
+            let span = tracing::info_span!("conn", %peer);
+            self.tracker.spawn(
+                async move {
+                    tracing::debug!("accepted");
+                    if let Err(err) = handler.run().await {
+                        tracing::warn!(error = %err, "connection error");
+                    }
+                    tracing::debug!("closed");
                 }
-            });
+                .instrument(span),
+            );
         }
     }
 }
@@ -83,6 +94,7 @@ impl Handler {
                 Ok(ReadFrame::Frame(f)) => f,
                 Ok(ReadFrame::Closed) => return Ok(()),
                 Err(ConnectionError::Protocol(e)) => {
+                    tracing::debug!(error = %e, "protocol error");
                     let reply = Frame::Error(format!("ERR Protocol error: {}", e));
                     self.conn.write_frame(&reply).await?;
                     return Ok(());
@@ -91,8 +103,15 @@ impl Handler {
             };
 
             let reply = match Command::from_frame(frame) {
-                Ok(cmd) => cmd.execute(&self.db),
+                Ok(cmd) => {
+                    tracing::debug!(cmd = cmd.name(), "command");
+                    cmd.execute(&self.db)
+                }
                 Err(CommandError::Empty) => continue,
+                Err(CommandError::Unknown(name)) => {
+                    tracing::debug!("unknown command");
+                    CommandError::Unknown(name).into_frame()
+                }
                 Err(e) => e.into_frame(),
             };
             self.conn.write_frame(&reply).await?;

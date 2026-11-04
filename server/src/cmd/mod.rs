@@ -106,6 +106,17 @@ impl Command {
         cmd.map_err(|e| e.in_command(&name))
     }
 
+    pub fn name(&self) -> &'static str {
+        match self {
+            Command::Ping(_) => "PING",
+            Command::Echo(_) => "ECHO",
+            Command::Set(_) => "SET",
+            Command::Get(_) => "GET",
+            Command::Del(_) => "DEL",
+            Command::Exists(_) => "EXISTS",
+        }
+    }
+
     pub fn execute(self, db: &Db) -> Frame {
         match self {
             Command::Ping(cmd) => cmd.execute(),
