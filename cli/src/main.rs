@@ -8,7 +8,10 @@ use std::{
 
 use resp::Frame;
 
-use crate::client::{Client, ClientError};
+use crate::{
+    cli::Line,
+    client::{Client, ClientError},
+};
 
 fn repl(client: &mut Client) -> Result<(), ClientError> {
     let mut line = String::new();
@@ -22,12 +25,11 @@ fn repl(client: &mut Client) -> Result<(), ClientError> {
             return Ok(());
         }
 
-        let args = cli::split_line(&line);
-        if args.is_empty() {
-            continue;
+        match cli::split_line(&line) {
+            Line::Args(args) if args.is_empty() => continue,
+            Line::Args(args) => exec(client, args)?,
+            Line::UnterminatedQuote => println!("Invalid argument(s)"),
         }
-
-        exec(client, args)?;
     }
 }
 

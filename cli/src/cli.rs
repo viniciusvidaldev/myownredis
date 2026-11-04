@@ -25,8 +25,45 @@ pub fn parse_args() -> Cli {
     }
 }
 
-pub fn split_line(line: &str) -> Vec<String> {
-    line.split_whitespace().map(String::from).collect()
+pub enum Line {
+    Args(Vec<String>),
+    UnterminatedQuote,
+}
+
+pub fn split_line(line: &str) -> Line {
+    let mut args = Vec::new();
+    let mut current = String::new();
+    let mut in_arg = false;
+    let mut quote: Option<char> = None;
+
+    for c in line.chars() {
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) => current.push(c),
+            None if c == '"' || c == '\'' => {
+                quote = Some(c);
+                in_arg = true;
+            }
+            None if c.is_whitespace() => {
+                if in_arg {
+                    args.push(std::mem::take(&mut current));
+                    in_arg = false;
+                }
+            }
+            None => {
+                current.push(c);
+                in_arg = true;
+            }
+        }
+    }
+
+    if quote.is_some() {
+        return Line::UnterminatedQuote;
+    }
+    if in_arg {
+        args.push(current);
+    }
+    Line::Args(args)
 }
 
 pub struct Minimal;
