@@ -1,7 +1,6 @@
 use std::{
     collections::{BTreeSet, HashMap},
     sync::{Arc, Mutex},
-    time::Duration,
 };
 
 use bytes::Bytes;
@@ -45,15 +44,21 @@ struct Entry {
     expires_at: Option<Instant>,
 }
 
+impl Entry {
+    fn is_expired(&self, now: Instant) -> bool {
+        self.expires_at.is_some_and(|when| when <= now)
+    }
+}
+
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct Expiration {
     // Field order is the sort order: derived Ord compares when first, then key.
     when: Instant,
-    key: String,
+    key: Bytes,
 }
 
 struct State {
-    entries: HashMap<String, Entry>,
+    entries: HashMap<Bytes, Entry>,
     expirations: BTreeSet<Expiration>,
     shutdown: bool,
 }
@@ -79,18 +84,17 @@ impl Db {
         Db { shared }
     }
 
-    pub(crate) fn get(&self, key: &str) -> Option<Bytes> {
+    pub(crate) fn get(&self, key: &[u8]) -> Option<Bytes> {
         let state = self.shared.state.lock().unwrap();
         let entry = state.entries.get(key)?;
-        if entry.expires_at.is_some_and(|when| when <= Instant::now()) {
+        if entry.is_expired(Instant::now()) {
             return None;
-        };
+        }
         Some(entry.value.clone())
     }
 
-    pub(crate) fn set(&self, key: String, value: Bytes, expire: Option<Duration>) {
+    pub(crate) fn set(&self, key: Bytes, value: Bytes, expires_at: Option<Instant>) {
         let mut state = self.shared.state.lock().unwrap();
-        let expires_at = expire.map(|duration| Instant::now() + duration);
 
         // Must be computed before inserting the new expiration, or it would compare against itself.
         let notify = match expires_at {
@@ -118,6 +122,45 @@ impl Db {
         if notify {
             self.shared.background_task.notify_one();
         }
+    }
+
+    pub(crate) fn exists(&self, keys: &[Bytes]) -> usize {
+        let state = self.shared.state.lock().unwrap();
+        let now = Instant::now();
+        let mut amount = 0;
+        for key in keys {
+            let Some(entry) = state.entries.get(key) else {
+                continue;
+            };
+            if !entry.is_expired(now) {
+                amount += 1;
+            }
+        }
+        amount
+    }
+
+    pub(crate) fn del(&self, keys: &[Bytes]) -> usize {
+        let mut state = self.shared.state.lock().unwrap();
+        let now = Instant::now();
+        let mut deleted = 0;
+        for key in keys {
+            let Some(entry) = state.entries.remove(key) else {
+                continue;
+            };
+
+            if let Some(when) = entry.expires_at {
+                let exp = Expiration {
+                    when,
+                    key: key.clone(),
+                };
+                state.expirations.remove(&exp);
+            }
+
+            if !entry.is_expired(now) {
+                deleted += 1;
+            }
+        }
+        deleted
     }
 
     fn shutdown_purge_task(&self) {
