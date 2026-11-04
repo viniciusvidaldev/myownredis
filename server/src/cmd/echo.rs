@@ -1,7 +1,8 @@
 use bytes::Bytes;
 use resp::Frame;
 
-use crate::parse::{Parse, ParseError};
+use super::ArgError;
+use crate::parse::Parse;
 
 #[derive(Debug)]
 pub struct Echo {
@@ -9,9 +10,9 @@ pub struct Echo {
 }
 
 impl Echo {
-    pub(super) fn parse(parse: &mut Parse) -> Result<Self, ParseError> {
+    pub(super) fn parse(parse: &mut Parse) -> Result<Self, ArgError> {
         let msg = parse.next_bytes()?;
-        Ok(Self { msg: msg })
+        Ok(Self { msg })
     }
 
     pub(super) fn execute(self) -> Frame {

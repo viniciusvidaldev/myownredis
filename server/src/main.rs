@@ -1,9 +1,10 @@
-mod command;
+mod cmd;
 mod connection;
+mod db;
 mod parse;
 mod server;
 
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, signal};
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -12,7 +13,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 async fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:6379").await?;
     // server::run(listener, signal::ctrl_c()).await;
-    if let Err(e) = server::run(listener).await {
+    if let Err(e) = server::run(listener, signal::ctrl_c()).await {
         eprintln!("err: {e}");
     };
     Ok(())
